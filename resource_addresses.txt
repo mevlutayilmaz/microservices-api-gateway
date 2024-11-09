@@ -1,0 +1,5 @@
+API 1 : https://localhost:7019
+API 2 : https://localhost:7266
+API 3 : https://localhost:7023
+
+Ocelot_API_Gateway : https://localhost:7130
