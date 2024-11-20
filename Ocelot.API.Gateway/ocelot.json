@@ -25,11 +25,20 @@
       "DownstreamHostAndPorts": [
         {
           "Host": "localhost",
-          "Port": 7266
-        }
+          "Port": 7267
+        },{
+          "Host": "localhost",
+          "Port": 7268
+        },{
+          "Host": "localhost",
+          "Port": 7269
+        },
       ],
       "UpstreamPathTemplate": "/api2",
-      "UpstreamHttpMethod": [ "Get", "Post" ]
+      "UpstreamHttpMethod": [ "Get", "Post" ],
+      "LoadBalancerOptions": {
+        "Type": "RoundRobin"
+      }
     },
     {
       "DownstreamPathTemplate": "/",
