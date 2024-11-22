@@ -127,7 +127,7 @@ Authentication için `ocelot.json`'da aşağıdaki gibi bir yapılandırmada bul
   {
     "Routes": [
       {
-        "DownstreamPathTemplate": "/{everything}",
+        "DownstreamPathTemplate": "/",
         "DownstreamScheme": "https",
         "DownstreamHostAndPorts": [
           {
@@ -135,7 +135,7 @@ Authentication için `ocelot.json`'da aşağıdaki gibi bir yapılandırmada bul
             "Port": 7205
           }
         ],
-        "UpstreamPathTemplate": "/api1/{everything}",
+        "UpstreamPathTemplate": "/api1",
         "UpstreamHttpMethod": [ "GET", "POST" ],
         "AuthenticationOptions": {
           "AllowedScopes": [],
@@ -214,7 +214,7 @@ Görüldüğü üzere Role claim'ine karşılık Admin değerini politika olarak
   {
     "Routes": [
       {
-        "DownstreamPathTemplate": "/{everything}",
+        "DownstreamPathTemplate": "/",
         "DownstreamScheme": "https",
         "DownstreamHostAndPorts": [
           {
@@ -222,7 +222,7 @@ Görüldüğü üzere Role claim'ine karşılık Admin değerini politika olarak
             "Port": 7205
           }
         ],
-        "UpstreamPathTemplate": "/api1/{everything}",
+        "UpstreamPathTemplate": "/api1",
         "UpstreamHttpMethod": [ "GET", "POST" ],
         "AuthenticationOptions": {
           "AllowedScopes": [],
@@ -240,7 +240,36 @@ Görüldüğü üzere Role claim'ine karşılık Admin değerini politika olarak
   ```
 Böylece artık bu yapılandırmanın gerçekleştirildiği route'a 'Admin' claim'i eşliğinde istek gönderileceği ifade edilmiş olunmaktadır.
 
-### 5. Gelişmiş Özellikler:
+### 5. Ocelot ile Load Balancing:
+
+  ```json
+  {
+    "Routes": [
+      {
+        "DownstreamPathTemplate": "/",
+        "DownstreamScheme": "https",
+        "DownstreamHostAndPorts": [
+          {
+            "Host": "localhost",
+            "Port": 7205
+          }
+        ],
+        "UpstreamPathTemplate": "/api1",
+        "UpstreamHttpMethod": [ "GET", "POST" ],
+        "LoadBalancerOptions": {
+          "Type": "RoundRobin"
+        }
+      }
+    ],
+    "GlobalConfiguration": {
+      "BaseUrl": "https://localhost:7130"
+    }
+  }
+  ```
+
+Daha sağlam bir çözüm, Ocelot'un önüne bir harici load balancer yerleştirmektir. Bu load balancer (örneğin, Nginx, HAProxy, Consul, Kubernetes Service) mikro servislerin adreslerini bilir ve gelen istekleri bu servisler arasında dağıtır. Ocelot, bu load balancer'ın adresini hedef olarak kullanır.
+
+### 6. Gelişmiş Özellikler:
 
 * **Yetkilendirme:** Ocelot, JWT (JSON Web Token) ve diğer yetkilendirme mekanizmaları ile entegre edilebilir.  `ocelot.json` dosyasında ilgili ayarlar yapılandırılmalıdır.
 
@@ -255,6 +284,6 @@ Böylece artık bu yapılandırmanın gerçekleştirildiği route'a 'Admin' clai
 * **Cache:**  Ocelot, yanıtları önbelleğe alarak performansı artırabilir.
 
 
-### 6. Docker Kullanımı:
+### 7. Docker Kullanımı:
 
 Docker kullanarak Ocelot ve mikro servislerinizi containerize edebilirsiniz.  Dockerfile oluşturarak, uygulamalarınızı ve bağımlılıklarını image'lere paketleyebilirsiniz.  Docker Compose ile tüm containerları yönetebilirsiniz.
