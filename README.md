@@ -1,4 +1,4 @@
-# Ocelot API Gateway Kullanım Kılavuzu
+# Ocelot API Gateway
 
 Bu kılavuz, .NET tabanlı bir API Gateway olan Ocelot'un nasıl kullanılacağını adım adım açıklamaktadır. Ocelot, çeşitli mikro servisleri tek bir giriş noktası altında birleştirerek, istekleri yönlendirerek, yetkilendirme ve güvenlik gibi işlevleri sağlayarak uygulamalarınızın ölçeklenebilirliğini ve yönetilebilirliğini artırmanıza yardımcı olur.
 
@@ -117,8 +117,130 @@ Bunların dışında istekleri yönlendirme sürecinde parametreli yönlendirme 
 
 Ocelot'un yönlendirme yapması için, `ocelot.json` dosyasında tanımlanan mikro servislerin çalışır durumda olması gerekir.  Bu servisler ayrı projeler olabilir ve bağımsız olarak çalıştırılabilirler.
 
+### 4. Authentication & Authentication:
 
-### 4. Gelişmiş Özellikler:
+Ocelot'ta authentication ve authorization işlemlerini gerçekleştirmek için genellikle JWT kullanılmaktadır. Bunun için `Microsoft.AspNetCore.Authentication.JwtBearer` kütüphanesinin uygulamaya yüklenmesi gerekmektedir.
+
+Authentication için `ocelot.json`'da aşağıdaki gibi bir yapılandırmada bulunulması gerekmektedir.
+
+  ```json
+  {
+    "Routes": [
+      {
+        "DownstreamPathTemplate": "/{everything}",
+        "DownstreamScheme": "https",
+        "DownstreamHostAndPorts": [
+          {
+            "Host": "localhost",
+            "Port": 7205
+          }
+        ],
+        "UpstreamPathTemplate": "/api1/{everything}",
+        "UpstreamHttpMethod": [ "GET", "POST" ],
+        "AuthenticationOptions": {
+          "AllowedScopes": [],
+          "AuthenticationProviderKey": "Bearer"
+        }
+      }
+    ],
+    "GlobalConfiguration": {
+      "BaseUrl": "https://localhost:7130"
+    }
+  }
+  ```
+
+Örnekte görüldüğü üzere hangi route'da bir kontrol yapılacaksa onun nesnesinde AuthenticationOptions alanının tanımlanması gerekmektedir. Burada AuthenticationProviderKey alanına `Bearer` vererek, kimlik doğrulama opsiyonlarından JWT'nin kullanılacağı bildirilmektedir.
+
+Bu yapılandırmadan sonra API Gateway uygulamasının `Program.cs` dosyasında aşağıdaki yapılandırmanın yapılması gerekmektedir.
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Configuration.AddJsonFile("ocelot.json");
+builder.Services.AddOcelot(builder.Configuration);
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
+    {
+        options.TokenValidationParameters = new()
+        {
+            ValidateAudience = true,
+            ValidateIssuer = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Token:Issuer"],
+            ValidAudience = builder.Configuration["Token:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Token:SecurityKey"])),
+            ClockSkew = TimeSpan.Zero
+        };
+    });
+
+var app = builder.Build();
+
+app.UseAuthentication();
+app.UseAuthentication();
+
+await app.UseOcelot();
+app.UseHttpsRedirection();
+
+app.Run();
+```
+
+Audience, Issuer ve SecurityKey değerlerinin `appsettings.json` içerisinde saklamak daha doğru olacaktır. Bu değerleri kendinize göre özelleştirebilirsiniz.
+
+Böylece API Gateway uygulamasında authentication'ı yapılandırmış bulunuyoruz. Bu yapılandırmalara uygun bir şekilde servislere erişim göstermek isteniyorsa eğer alt servislerde de benzer şekilde  yapılandırmada bulunulması gerekmektedir.
+
+Authorization için ise claim tabanlı aşağıdaki gibi bir yapılandırmanın olduğunu varsayarsak:
+
+```charp
+builder.Services.AddAuthorization(options => options.AddPolicy("AdminPolicy", policy => policy.RequireClaim("Role", "Admin")));
+
+var app = builder.Build();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapGet("/", () => "API 1")
+    .RequireAuthorization("AdminPolicy");
+
+app.Run();
+```
+
+Görüldüğü üzere Role claim'ine karşılık Admin değerini politika olarak tanımlamış olduk. 
+
+`ocelot.json`'da da aşağıdaki gibi RouteClaimsRequirement yapılandırmasında bulunulmalıdır.
+
+  ```json
+  {
+    "Routes": [
+      {
+        "DownstreamPathTemplate": "/{everything}",
+        "DownstreamScheme": "https",
+        "DownstreamHostAndPorts": [
+          {
+            "Host": "localhost",
+            "Port": 7205
+          }
+        ],
+        "UpstreamPathTemplate": "/api1/{everything}",
+        "UpstreamHttpMethod": [ "GET", "POST" ],
+        "AuthenticationOptions": {
+          "AllowedScopes": [],
+          "AuthenticationProviderKey": "Bearer"
+        },
+        "RouteClaimsRequirement": {
+          "Role": "Admin"
+        }
+      }
+    ],
+    "GlobalConfiguration": {
+      "BaseUrl": "https://localhost:7130"
+    }
+  }
+  ```
+Böylece artık bu yapılandırmanın gerçekleştirildiği route'a 'Admin' claim'i eşliğinde istek gönderileceği ifade edilmiş olunmaktadır.
+
+### 5. Gelişmiş Özellikler:
 
 * **Yetkilendirme:** Ocelot, JWT (JSON Web Token) ve diğer yetkilendirme mekanizmaları ile entegre edilebilir.  `ocelot.json` dosyasında ilgili ayarlar yapılandırılmalıdır.
 
@@ -133,43 +255,6 @@ Ocelot'un yönlendirme yapması için, `ocelot.json` dosyasında tanımlanan mik
 * **Cache:**  Ocelot, yanıtları önbelleğe alarak performansı artırabilir.
 
 
-**5. Docker Kullanımı:**
+### 6. Docker Kullanımı:
 
 Docker kullanarak Ocelot ve mikro servislerinizi containerize edebilirsiniz.  Dockerfile oluşturarak, uygulamalarınızı ve bağımlılıklarını image'lere paketleyebilirsiniz.  Docker Compose ile tüm containerları yönetebilirsiniz.
-
-
-**Örnek `docker-compose.yml`:**
-
-```yaml
-version: "3.9"
-services:
-  ocelot:
-    image: <ocelot-image> # Ocelot docker image
-    ports:
-      - "5000:5000"
-    volumes:
-      - ./ocelot.json:/app/ocelot.json
-    depends_on:
-      - products-service
-      - users-service
-
-  products-service:
-    image: <products-service-image> # Products service docker image
-    ports:
-      - "5001:5001"
-
-  users-service:
-    image: <users-service-image> # Users service docker image
-    ports:
-      - "5002:5002"
-```
-
-**Önemli Notlar:**
-
-* Ocelot'un performansını optimize etmek için, doğru yapılandırma ve uygun kaynak kullanımı önemlidir.
-*  Güvenlik açısından, üretim ortamlarında HTTPS kullanımı zorunludur.
-*  Mikro servislerinizin adreslerini ve portlarını `ocelot.json` dosyasında doğru bir şekilde belirtmeniz gerekir. Docker kullanıyorsanız, container isimlerini kullanmanız daha pratik olacaktır.
-*  Her zaman en son Ocelot sürümünü kullanmaya çalışın ve güncelleme notlarını takip edin.
-
-
-Bu kılavuz, Ocelot'un temel kullanımını açıklamaktadır. Daha detaylı bilgi için Ocelot'un resmi dokümanlarını inceleyebilirsiniz.  Ayrıca, özel durumlar için gerekli olan konfigürasyonlar ve gelişmiş özellikler için Ocelot'un geniş dokümantasyonuna ve örneklerine bakmanız tavsiye edilir.
